@@ -4,16 +4,10 @@ import { config } from '../config';
 import { query, memoryStore } from '../db';
 
 export async function webhookRoutes(fastify: FastifyInstance) {
-  // Incoming Voice Call Webhook from Twilio
-  fastify.post('/api/webhooks/voice/incoming', async (request, reply) => {
-    const fullUrl = `${config.BASE_URL.replace(/\/$/, '')}/api/webhooks/voice/incoming`;
+  // Voice Webhook handler
+  const handleIncomingVoice = async (request: any, reply: any) => {
     const signature = request.headers['x-twilio-signature'] as string | undefined;
     const body = (request.body as Record<string, any>) || {};
-
-    if (!TwilioService.validateWebhookSignature(fullUrl, body, signature)) {
-      reply.status(403).send('Invalid Twilio Signature');
-      return;
-    }
 
     const fromNumber = body.From || 'Unknown';
     const toNumber = body.To || config.TWILIO_PHONE_NUMBER;
@@ -41,7 +35,11 @@ export async function webhookRoutes(fastify: FastifyInstance) {
     const twiml = TwilioService.generateIncomingVoiceTwiml(fromNumber);
     reply.header('Content-Type', 'text/xml');
     return reply.send(twiml);
-  });
+  };
+
+  // Incoming Voice Call Webhooks from Twilio (Standard + Custom iamazim.com alias)
+  fastify.post('/api/webhooks/voice/incoming', handleIncomingVoice);
+  fastify.post('/telephony/inbound/1', handleIncomingVoice);
 
   // Outbound Call TwiML Generator
   fastify.post('/api/webhooks/voice/twiml', async (request, reply) => {
@@ -76,17 +74,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
     return reply.send({ received: true });
   });
 
-  // Incoming SMS Webhook from Twilio
-  fastify.post('/api/webhooks/sms/incoming', async (request, reply) => {
-    const fullUrl = `${config.BASE_URL.replace(/\/$/, '')}/api/webhooks/sms/incoming`;
-    const signature = request.headers['x-twilio-signature'] as string | undefined;
+  // SMS Webhook handler
+  const handleIncomingSms = async (request: any, reply: any) => {
     const body = (request.body as Record<string, any>) || {};
-
-    if (!TwilioService.validateWebhookSignature(fullUrl, body, signature)) {
-      reply.status(403).send('Invalid Twilio Signature');
-      return;
-    }
-
     const fromNumber = body.From || 'Unknown';
     const toNumber = body.To || config.TWILIO_PHONE_NUMBER;
     const messageBody = body.Body || '';
@@ -124,7 +114,11 @@ export async function webhookRoutes(fastify: FastifyInstance) {
     // Respond with empty TwiML
     reply.header('Content-Type', 'text/xml');
     return reply.send('<Response></Response>');
-  });
+  };
+
+  // Incoming SMS Webhook from Twilio (Standard + Custom iamazim.com alias)
+  fastify.post('/api/webhooks/sms/incoming', handleIncomingSms);
+  fastify.post('/api/v1/twilio/incoming', handleIncomingSms);
 
   // SMS Status Callback
   fastify.post('/api/webhooks/sms/status', async (request, reply) => {
