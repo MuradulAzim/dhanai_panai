@@ -1,0 +1,6 @@
+{
+  "name": "Second Number",
+  "description": "Second phone number app powered by Twilio for international calling, SMS, call history, and message threads.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

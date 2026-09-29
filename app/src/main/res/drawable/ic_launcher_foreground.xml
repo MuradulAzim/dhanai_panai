@@ -1,0 +1,21 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="1.0"
+        android:scaleY="1.0">
+        <!-- Phone Handset Silhouette -->
+        <path
+            android:fillColor="#38BDF8"
+            android:pathData="M35,32 C33.34,32 32,33.34 32,35 C32,56.54 49.46,74 71,74 C72.66,74 74,72.66 74,71 L74,63.5 C74,62.4 73.1,61.5 72,61.5 L64.8,60.3 C63.9,60.1 63,60.4 62.4,61 L58.2,65.2 C51.4,61.7 45.8,56.1 42.3,49.3 L46.5,45.1 C47.1,44.5 47.4,43.6 47.2,42.7 L46,35.5 C45.8,34.4 44.9,33.5 43.8,33.5 L35,32 Z" />
+        <!-- Accent circle badge in top right with numeral 2 -->
+        <path
+            android:fillColor="#0284C7"
+            android:pathData="M70,30 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M66.5,24.5 C68.2,23.5 71.8,23.5 73.2,25.2 C74.2,26.5 73.8,28.2 72.4,29.8 L67.8,34.5 L75,34.5 L75,36.5 L65.5,36.5 L65.5,34.8 L70.8,29 C71.8,27.8 72,26.8 71.3,26 C70.6,25.2 68.8,25.2 67.8,25.8 L66.5,24.5 Z" />
+    </group>
+</vector>
