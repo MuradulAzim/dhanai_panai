@@ -25,7 +25,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PhoneInTalk
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.Storage
@@ -34,6 +36,8 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Warning
+import com.example.ui.screens.admin.AdminPanelScreen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -48,6 +52,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -84,6 +89,18 @@ fun SettingsScreen(viewModel: SecondNumberViewModel) {
     val isConnected by viewModel.isServerConnected.collectAsState()
     val statusMessage by viewModel.serverStatusMessage.collectAsState()
 
+    val smsBalance by viewModel.smsBalance.collectAsState()
+    val callMinutesBalance by viewModel.callMinutesBalance.collectAsState()
+    val userApiKey by viewModel.userApiKey.collectAsState()
+    val isAdmin by viewModel.isAdmin.collectAsState()
+
+    var showAdminScreen by remember { mutableStateOf(false) }
+    var showPurchaseDialog by remember { mutableStateOf(false) }
+    var showAdminPinDialog by remember { mutableStateOf(false) }
+    var showSetApiKeyDialog by remember { mutableStateOf(false) }
+    var adminPinInput by remember { mutableStateOf("") }
+    var apiKeyInput by remember { mutableStateOf(userApiKey) }
+
     var serverUrl by remember { mutableStateOf(viewModel.repository.getServerUrl()) }
     var authToken by remember { mutableStateOf(viewModel.repository.getAuthToken()) }
 
@@ -92,6 +109,91 @@ fun SettingsScreen(viewModel: SecondNumberViewModel) {
     var customTwilioPhoneNumber by remember { mutableStateOf(viewModel.repository.getTwilioPhoneNumber()) }
     var showAuthToken by remember { mutableStateOf(false) }
 
+    if (showAdminScreen) {
+        AdminPanelScreen(
+            viewModel = viewModel,
+            onBack = { showAdminScreen = false }
+        )
+        return
+    }
+
+    if (showPurchaseDialog) {
+        PackagePurchaseDialog(
+            viewModel = viewModel,
+            onDismiss = { showPurchaseDialog = false }
+        )
+    }
+
+    if (showAdminPinDialog) {
+        AlertDialog(
+            onDismissRequest = { showAdminPinDialog = false },
+            title = { Text("এডমিন কন্ট্রোল প্যানেল লগইন") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("এডমিন পিন প্রবেশ করান (ডিফল্ট: 7788):", fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = adminPinInput,
+                        onValueChange = { adminPinInput = it },
+                        label = { Text("Admin PIN") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.adminLogin(adminPinInput.trim()) { success ->
+                            if (success) {
+                                showAdminPinDialog = false
+                                showAdminScreen = true
+                            }
+                        }
+                    }
+                ) {
+                    Text("লগইন")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAdminPinDialog = false }) { Text("বাতিল") }
+            }
+        )
+    }
+
+    if (showSetApiKeyDialog) {
+        AlertDialog(
+            onDismissRequest = { showSetApiKeyDialog = false },
+            title = { Text("আপনার API Key সেট করুন") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("এডমিন আপনাকে যে API Key দিয়েছে তা এখানে দিন:", fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = apiKeyInput,
+                        onValueChange = { apiKeyInput = it },
+                        label = { Text("API Key (e.g. sec_live_...)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (apiKeyInput.isNotBlank()) {
+                            viewModel.saveUserApiKey(apiKeyInput.trim())
+                            showSetApiKeyDialog = false
+                        }
+                    }
+                ) {
+                    Text("সংরক্ষণ করুন")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSetApiKeyDialog = false }) { Text("বাতিল") }
+            }
+        )
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -99,7 +201,7 @@ fun SettingsScreen(viewModel: SecondNumberViewModel) {
             .testTag("settings_screen"),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Active Twilio Number Card
+        // Active Twilio Number Card & Quota
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -137,7 +239,7 @@ fun SettingsScreen(viewModel: SecondNumberViewModel) {
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Powered by Twilio Voice & SMS",
+                                    text = "Second Number Virtual Network",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -176,6 +278,71 @@ fun SettingsScreen(viewModel: SecondNumberViewModel) {
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Quota Badges
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = PrimaryBlue.copy(alpha = 0.1f),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Text("SMS ব্যালেন্স", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("$smsBalance SMS", fontWeight = FontWeight.Bold, color = PrimaryBlue, fontSize = 15.sp)
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = CallGreen.copy(alpha = 0.1f),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Text("কল মিনিট", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("$callMinutesBalance Min", fontWeight = FontWeight.Bold, color = CallGreen, fontSize = 15.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Package Purchase and API Key Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                viewModel.fetchUserRates()
+                                showPurchaseDialog = true
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("প্যাকেজ কিনুন", fontWeight = FontWeight.Bold)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                apiKeyInput = userApiKey
+                                showSetApiKeyDialog = true
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("API Key সেট")
+                        }
+                    }
                 }
             }
         }
@@ -544,6 +711,68 @@ fun SettingsScreen(viewModel: SecondNumberViewModel) {
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Incoming SMS")
                         }
+                    }
+                }
+            }
+        }
+
+        // Admin Access Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = PrimaryBlue.copy(alpha = 0.15f),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Security,
+                                    contentDescription = null,
+                                    tint = PrimaryBlue,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "এডমিন কন্ট্রোল প্যানেল",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "ইউজারদের পেমেন্ট অনুমোদন ও রেট ম্যানেজমেন্ট",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "আপনি যদি এই সার্ভার ও এপিআই এর মালিক হন, তবে পিন (ডিফল্ট: 7788) দিয়ে লগইন করে ইউজারদের রিকোয়েস্ট অনুমোদন করতে পারেন।",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { showAdminPinDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("এডমিন প্যানেলে লগইন করুন")
                     }
                 }
             }

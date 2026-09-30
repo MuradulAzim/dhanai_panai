@@ -178,4 +178,171 @@ export class TwilioService {
     dial.number(destinationNumber);
     return response.toString();
   }
+
+  /**
+   * Search available phone numbers by country and capabilities
+   */
+  static async searchAvailableNumbers(countryCode = 'US', limit = 10): Promise<Array<{
+    phoneNumber: string;
+    friendlyName: string;
+    locality?: string;
+    region?: string;
+    isoCountry: string;
+    capabilities: { voice: boolean; SMS: boolean; MMS: boolean };
+  }>> {
+    const fallbackNumbers = [
+      { phoneNumber: '+12025550143', friendlyName: '(202) 555-0143', locality: 'Washington', region: 'DC', isoCountry: 'US', capabilities: { voice: true, SMS: true, MMS: true } },
+      { phoneNumber: '+14155550188', friendlyName: '(415) 555-0188', locality: 'San Francisco', region: 'CA', isoCountry: 'US', capabilities: { voice: true, SMS: true, MMS: true } },
+      { phoneNumber: '+16465550172', friendlyName: '(646) 555-0172', locality: 'New York', region: 'NY', isoCountry: 'US', capabilities: { voice: true, SMS: true, MMS: true } },
+      { phoneNumber: '+442079460195', friendlyName: '+44 20 7946 0195', locality: 'London', region: 'Greater London', isoCountry: 'GB', capabilities: { voice: true, SMS: true, MMS: false } },
+      { phoneNumber: '+16135550119', friendlyName: '(613) 555-0119', locality: 'Ottawa', region: 'ON', isoCountry: 'CA', capabilities: { voice: true, SMS: true, MMS: true } },
+      { phoneNumber: '+61291550144', friendlyName: '+61 2 9155 0144', locality: 'Sydney', region: 'NSW', isoCountry: 'AU', capabilities: { voice: true, SMS: true, MMS: false } }
+    ];
+
+    if (!twilioClient) {
+      return fallbackNumbers.filter(n => countryCode === 'ALL' || n.isoCountry.toLowerCase() === countryCode.toLowerCase());
+    }
+
+    try {
+      const results = await twilioClient.availablePhoneNumbers(countryCode).local.list({
+        limit,
+        voiceEnabled: true,
+        smsEnabled: true
+      });
+      if (results && results.length > 0) {
+        return results.map(n => ({
+          phoneNumber: n.phoneNumber,
+          friendlyName: n.friendlyName,
+          locality: n.locality,
+          region: n.region,
+          isoCountry: n.isoCountry,
+          capabilities: {
+            voice: (n.capabilities as any)?.voice ?? true,
+            SMS: (n.capabilities as any)?.sms ?? (n.capabilities as any)?.SMS ?? true,
+            MMS: (n.capabilities as any)?.mms ?? (n.capabilities as any)?.MMS ?? false
+          }
+        }));
+      }
+      return fallbackNumbers.filter(n => countryCode === 'ALL' || n.isoCountry.toLowerCase() === countryCode.toLowerCase());
+    } catch (err: any) {
+      console.warn('[Twilio] searchAvailableNumbers error, using fallback catalog:', err.message);
+      return fallbackNumbers.filter(n => countryCode === 'ALL' || n.isoCountry.toLowerCase() === countryCode.toLowerCase());
+    }
+  }
+
+  /**
+   * Buy an incoming phone number and automatically configure webhook URLs
+   */
+  static async buyPhoneNumber(phoneNumber?: string, friendlyName?: string): Promise<{
+    success: boolean;
+    phoneNumber?: string;
+    sid?: string;
+    error?: string;
+  }> {
+    const voiceWebhook = `${config.BASE_URL.replace(/\/$/, '')}/api/webhooks/voice/incoming`;
+    const smsWebhook = `${config.BASE_URL.replace(/\/$/, '')}/api/webhooks/sms/incoming`;
+
+    if (!twilioClient) {
+      const boughtNum = phoneNumber || '+1' + Math.floor(2025550100 + Math.random() * 899);
+      const mockSid = 'PN' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      return {
+        success: true,
+        phoneNumber: boughtNum,
+        sid: mockSid
+      };
+    }
+
+    try {
+      let targetNumber = phoneNumber;
+      if (!targetNumber) {
+        const available = await twilioClient.availablePhoneNumbers('US').local.list({ limit: 1 });
+        if (available.length > 0) {
+          targetNumber = available[0].phoneNumber;
+        } else {
+          return { success: false, error: 'No available numbers found in pool' };
+        }
+      }
+
+      const purchased = await twilioClient.incomingPhoneNumbers.create({
+        phoneNumber: targetNumber,
+        friendlyName: friendlyName || `Client - ${targetNumber}`,
+        voiceUrl: voiceWebhook,
+        voiceMethod: 'POST',
+        smsUrl: smsWebhook,
+        smsMethod: 'POST'
+      });
+
+      return {
+        success: true,
+        phoneNumber: purchased.phoneNumber,
+        sid: purchased.sid
+      };
+    } catch (err: any) {
+      console.error('[Twilio] buyPhoneNumber error:', err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Release / Delete a phone number from Twilio account to stop monthly charges
+   */
+  static async releasePhoneNumber(sidOrNumber: string): Promise<{ success: boolean; error?: string }> {
+    if (!twilioClient) {
+      return { success: true };
+    }
+
+    try {
+      if (sidOrNumber.startsWith('PN')) {
+        await twilioClient.incomingPhoneNumbers(sidOrNumber).remove();
+        return { success: true };
+      } else {
+        const list = await twilioClient.incomingPhoneNumbers.list({ phoneNumber: sidOrNumber });
+        if (list.length > 0) {
+          await twilioClient.incomingPhoneNumbers(list[0].sid).remove();
+          return { success: true };
+        }
+        return { success: false, error: 'Number not found in Twilio account' };
+      }
+    } catch (err: any) {
+      console.error('[Twilio] releasePhoneNumber error:', err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * List all phone numbers active in the Twilio account
+   */
+  static async listActivePhoneNumbers(): Promise<Array<{
+    sid: string;
+    phoneNumber: string;
+    friendlyName: string;
+    dateCreated: string;
+    capabilities: any;
+  }>> {
+    if (!twilioClient) {
+      return [
+        {
+          sid: 'PNmock_master_line',
+          phoneNumber: config.TWILIO_PHONE_NUMBER,
+          friendlyName: 'Master Twilio Line',
+          dateCreated: new Date().toISOString(),
+          capabilities: { voice: true, SMS: true }
+        }
+      ];
+    }
+
+    try {
+      const numbers = await twilioClient.incomingPhoneNumbers.list({ limit: 50 });
+      return numbers.map(n => ({
+        sid: n.sid,
+        phoneNumber: n.phoneNumber,
+        friendlyName: n.friendlyName,
+        dateCreated: n.dateCreated?.toISOString() || new Date().toISOString(),
+        capabilities: n.capabilities
+      }));
+    } catch (err: any) {
+      console.error('[Twilio] listActivePhoneNumbers error:', err.message);
+      return [];
+    }
+  }
 }

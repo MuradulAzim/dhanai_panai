@@ -21,9 +21,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Phone
+import com.example.ui.viewmodel.AppNavTab
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -183,7 +185,7 @@ fun DialerScreen(viewModel: SecondNumberViewModel) {
             }
         }
 
-        // Bottom Action Row: Call Button and Backspace
+        // Bottom Action Row: Chat Button, Call Button and Backspace
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -191,8 +193,31 @@ fun DialerScreen(viewModel: SecondNumberViewModel) {
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Placeholder spacer to balance layout
-            Box(modifier = Modifier.size(56.dp))
+            // Quick SMS/Chat button when number dialed
+            if (dialedNumber.isNotEmpty()) {
+                FilledIconButton(
+                    onClick = {
+                        viewModel.selectTab(AppNavTab.MESSAGES)
+                        viewModel.openConversation(dialedNumber.trim())
+                    },
+                    modifier = Modifier
+                        .size(56.dp)
+                        .testTag("dialer_chat_button"),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = PrimaryBlue.copy(alpha = 0.15f),
+                        contentColor = PrimaryBlue
+                    ),
+                    shape = CircleShape
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Chat,
+                        contentDescription = "Send SMS",
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            } else {
+                Box(modifier = Modifier.size(56.dp))
+            }
 
             // Main Call FAB Button
             FilledIconButton(

@@ -5,6 +5,10 @@ import { callRoutes } from './routes/calls';
 import { messageRoutes } from './routes/messages';
 import { webhookRoutes } from './routes/webhooks';
 import { statusRoutes } from './routes/status';
+import { adminRoutes } from './routes/admin';
+import { userApiRoutes } from './routes/userApi';
+import { twilioProvisioningRoutes } from './routes/twilioProvisioning';
+import { portalRoutes } from './routes/portal';
 
 export function buildServer(): FastifyInstance {
   const fastify = Fastify({
@@ -24,14 +28,15 @@ export function buildServer(): FastifyInstance {
   fastify.register(callRoutes);
   fastify.register(messageRoutes);
   fastify.register(webhookRoutes);
+  fastify.register(adminRoutes);
+  fastify.register(userApiRoutes);
+  fastify.register(twilioProvisioningRoutes);
+  fastify.register(portalRoutes);
 
-  // Root health check
-  fastify.get('/', async () => {
-    return {
-      service: 'Second Number Twilio Voice & SMS Backend',
-      version: '1.0.0',
-      status: 'operational'
-    };
+  // Root health check & portal fallback
+  fastify.get('/', async (_req, reply) => {
+    reply.type('text/html');
+    return reply.redirect('/portal');
   });
 
   return fastify;

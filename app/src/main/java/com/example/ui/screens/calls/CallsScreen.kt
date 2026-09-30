@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.entity.CallDirection
@@ -170,7 +171,7 @@ fun CallLogItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Direction Icon Badge
@@ -181,7 +182,7 @@ fun CallLogItem(
                     CallDirection.OUTGOING -> PrimaryBlue.copy(alpha = 0.15f)
                     CallDirection.INCOMING -> CallGreen.copy(alpha = 0.15f)
                 },
-                modifier = Modifier.size(44.dp)
+                modifier = Modifier.size(40.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     val icon = when (call.direction) {
@@ -198,68 +199,96 @@ fun CallLogItem(
                         imageVector = icon,
                         contentDescription = call.direction.name,
                         tint = iconColor,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
-            // Details
-            Column(modifier = Modifier.weight(1f)) {
+            // Details - takes remaining space
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 6.dp)
+            ) {
                 Text(
                     text = call.contactName ?: call.remoteNumber,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     color = if (call.direction == CallDirection.MISSED) CallRed else MaterialTheme.colorScheme.onSurface
                 )
                 if (call.contactName != null) {
                     Text(
                         text = call.remoteNumber,
                         style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
                         text = formattedTime,
                         style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (call.durationSeconds > 0) {
+                        val min = call.durationSeconds / 60
+                        val sec = call.durationSeconds % 60
+                        val durText = if (min > 0) "${min}m ${sec}s" else "${sec}s"
                         Text(
-                            text = " • ${call.durationSeconds / 60}m ${call.durationSeconds % 60}s",
+                            text = " • $durText",
                             style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
 
-            // Action shortcuts
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onMessageClick) {
+            // Compact Action shortcuts (won't push text out)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                IconButton(
+                    onClick = onMessageClick,
+                    modifier = Modifier.size(36.dp)
+                ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Chat,
                         contentDescription = "Message",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
-                IconButton(onClick = onCallClick) {
+                IconButton(
+                    onClick = onCallClick,
+                    modifier = Modifier.size(36.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.Call,
                         contentDescription = "Call back",
                         tint = CallGreen,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
-                IconButton(onClick = onDeleteClick) {
+                IconButton(
+                    onClick = onDeleteClick,
+                    modifier = Modifier.size(36.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "Delete call",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(18.dp)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }

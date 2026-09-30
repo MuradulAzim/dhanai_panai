@@ -66,4 +66,85 @@ interface ApiService {
     suspend fun updateTwilioCredentials(
         @Body request: com.example.data.remote.models.UpdateTwilioCredentialsRequest
     ): Response<com.example.data.remote.models.UpdateTwilioCredentialsResponse>
+
+    // End-User Reseller Endpoints
+    @GET("api/user/rates")
+    suspend fun getUserRates(): Response<com.example.data.remote.models.RatesAndBankingDto>
+
+    @POST("api/user/request-package")
+    suspend fun requestPackage(
+        @Body request: com.example.data.remote.models.UserPackageRequest
+    ): Response<com.example.data.remote.models.UserPackageResponse>
+
+    @GET("api/user/profile")
+    suspend fun getUserProfile(
+        @retrofit2.http.Header("x-api-key") apiKey: String
+    ): Response<com.example.data.remote.models.UserProfileResponse>
+
+    // Admin Panel Endpoints
+    @POST("api/admin/login")
+    suspend fun adminLogin(
+        @Body req: com.example.data.remote.models.AdminLoginRequest
+    ): Response<com.example.data.remote.models.AdminLoginResponse>
+
+    @GET("api/admin/stats")
+    suspend fun getAdminStats(): Response<com.example.data.remote.models.AdminStatsDto>
+
+    @GET("api/admin/rates")
+    suspend fun getAdminRates(): Response<com.example.data.remote.models.RatesAndBankingDto>
+
+    @POST("api/admin/rates")
+    suspend fun updateAdminRates(
+        @Body req: com.example.data.remote.models.RatesAndBankingDto
+    ): Response<GenericApiResponse>
+
+    @GET("api/admin/requests")
+    suspend fun getAdminRequests(): Response<com.example.data.remote.models.AdminRequestsResponse>
+
+    @POST("api/admin/requests/{id}/approve")
+    suspend fun approveRequest(
+        @Path("id") id: String
+    ): Response<GenericApiResponse>
+
+    @POST("api/admin/requests/{id}/reject")
+    suspend fun rejectRequest(
+        @Path("id") id: String,
+        @Body payload: Map<String, String>
+    ): Response<GenericApiResponse>
+
+    @GET("api/admin/users")
+    suspend fun getAdminUsers(): Response<com.example.data.remote.models.AdminUsersResponse>
+
+    @POST("api/admin/users/{apiKey}/topup")
+    suspend fun topupUser(
+        @Path("apiKey") apiKey: String,
+        @Body payload: Map<String, Any>
+    ): Response<GenericApiResponse>
+
+    // Marketplace Catalog & Twilio Provisioning
+    @GET("api/numbers/catalog")
+    suspend fun getNumberCatalog(): Response<com.example.data.remote.models.NumberCatalogResponse>
+
+    @GET("api/twilio/available-numbers")
+    suspend fun getAvailableTwilioNumbers(
+        @retrofit2.http.Query("country") country: String
+    ): Response<com.example.data.remote.models.AvailableNumbersResponse>
+
+    @POST("api/twilio/buy-number")
+    suspend fun buyTwilioNumber(
+        @Body req: com.example.data.remote.models.BuyNumberRequest
+    ): Response<com.example.data.remote.models.BuyNumberResponse>
+
+    @POST("api/twilio/release-number")
+    suspend fun releaseTwilioNumber(
+        @Body req: com.example.data.remote.models.ReleaseNumberRequest
+    ): Response<GenericApiResponse>
+
+    @GET("api/twilio/my-numbers")
+    suspend fun getMyTwilioNumbers(): Response<com.example.data.remote.models.MyTwilioNumbersResponse>
+
+    @POST("api/billing/verify-play-purchase")
+    suspend fun verifyPlayPurchase(
+        @Body req: com.example.data.remote.models.PlayPurchaseVerifyRequest
+    ): Response<com.example.data.remote.models.PlayPurchaseVerifyResponse>
 }

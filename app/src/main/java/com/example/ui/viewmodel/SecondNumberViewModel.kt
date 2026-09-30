@@ -3,12 +3,17 @@ package com.example.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.billing.PlayBillingManager
 import com.example.data.local.entity.CallDirection
 import com.example.data.local.entity.CallEntity
 import com.example.data.local.entity.CallStatus
 import com.example.data.local.entity.ConversationSummary
 import com.example.data.local.entity.MessageDirection
 import com.example.data.local.entity.MessageEntity
+import com.example.data.remote.models.AdminStatsDto
+import com.example.data.remote.models.ApiUserDto
+import com.example.data.remote.models.RatesAndBankingDto
+import com.example.data.remote.models.RechargeRequestDto
 import com.example.data.repository.SecondNumberRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -26,6 +31,8 @@ enum class AppNavTab {
     DIALER,
     CALLS,
     MESSAGES,
+    STORE,
+    AI_CHAT,
     SETTINGS
 }
 
@@ -105,6 +112,8 @@ class SecondNumberViewModel(application: Application) : AndroidViewModel(applica
         viewModelScope.launch {
             repository.seedInitialDataIfEmpty()
             repository.checkServerStatus()
+            repository.fetchNumberCatalog()
+            repository.fetchUserRates()
         }
     }
 
@@ -317,6 +326,197 @@ class SecondNumberViewModel(application: Application) : AndroidViewModel(applica
                 _selectedConversation.value = null
             }
             emitToast("Conversation deleted")
+        }
+    }
+
+    // Reseller & Quota States
+    val userApiKey = repository.userApiKey.asStateFlow()
+    val smsBalance = repository.smsBalance.asStateFlow()
+    val callMinutesBalance = repository.callMinutesBalance.asStateFlow()
+    val ratesAndBanking = repository.ratesAndBanking.asStateFlow()
+    val isAdmin = repository.isAdmin.asStateFlow()
+
+    private val _adminRequests = MutableStateFlow<List<RechargeRequestDto>>(emptyList())
+    val adminRequests: StateFlow<List<RechargeRequestDto>> = _adminRequests.asStateFlow()
+
+    private val _adminUsers = MutableStateFlow<List<ApiUserDto>>(emptyList())
+    val adminUsers: StateFlow<List<ApiUserDto>> = _adminUsers.asStateFlow()
+
+    private val _adminStats = MutableStateFlow<AdminStatsDto?>(null)
+    val adminStats: StateFlow<AdminStatsDto?> = _adminStats.asStateFlow()
+
+    fun fetchUserRates() {
+        viewModelScope.launch {
+            repository.fetchUserRates()
+        }
+    }
+
+    fun submitPackageRequest(
+        userName: String,
+        userContact: String,
+        smsRequested: Int,
+        minutesRequested: Int,
+        totalAmountBdt: Double,
+        paymentMethod: String,
+        senderNumber: String,
+        transactionId: String,
+        screenshotBase64: String? = null,
+        onSuccess: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = repository.submitPackageRequest(
+                userName, userContact, smsRequested, minutesRequested,
+                totalAmountBdt, paymentMethod, senderNumber, transactionId, screenshotBase64
+            )
+            result.onSuccess { reqId ->
+                emitToast("পেমেন্ট রিকোয়েস্ট সাবমিট হয়েছে (ID: $reqId)")
+                onSuccess(reqId)
+            }.onFailure {
+                emitToast("সাবমিট ব্যর্থ হয়েছে: ${it.message}")
+            }
+        }
+    }
+
+    fun fetchUserProfileAndQuota() {
+        viewModelScope.launch {
+            repository.fetchUserProfileAndQuota()
+        }
+    }
+
+    fun saveUserApiKey(key: String, assignedNumber: String? = null) {
+        repository.saveUserApiKey(key, assignedNumber)
+        emitToast("API Key সংরক্ষিত হয়েছে")
+        fetchUserProfileAndQuota()
+    }
+
+    // Admin Actions
+    fun adminLogin(pin: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val result = repository.adminLogin(pin)
+            result.onSuccess {
+                emitToast("এডমিন সফলভাবে লগইন হয়েছেন")
+                loadAdminDashboard()
+                onResult(true)
+            }.onFailure {
+                emitToast("এডমিন পিন সঠিক নয়")
+                onResult(false)
+            }
+        }
+    }
+
+    fun loadAdminDashboard() {
+        viewModelScope.launch {
+            repository.getAdminRequests().onSuccess {
+                _adminRequests.value = it
+            }
+            repository.getAdminUsers().onSuccess {
+                _adminUsers.value = it
+            }
+            try {
+                val statsRes = com.example.data.remote.ApiClient.getService().getAdminStats()
+                if (statsRes.isSuccessful) {
+                    _adminStats.value = statsRes.body()
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun approveRequest(id: String) {
+        viewModelScope.launch {
+            repository.approveRequest(id).onSuccess {
+                emitToast("রিকোয়েস্ট অনুমোদন করা হয়েছে এবং API Key ইস্যু হয়েছে")
+                loadAdminDashboard()
+            }.onFailure {
+                emitToast("অনুমোদন ব্যর্থ হয়েছে")
+            }
+        }
+    }
+
+    fun rejectRequest(id: String, note: String) {
+        viewModelScope.launch {
+            repository.rejectRequest(id, note).onSuccess {
+                emitToast("রিকোয়েস্ট বাতিল করা হয়েছে")
+                loadAdminDashboard()
+            }.onFailure {
+                emitToast("বাতিল ব্যর্থ হয়েছে")
+            }
+        }
+    }
+
+    fun updateAdminRates(rates: RatesAndBankingDto) {
+        viewModelScope.launch {
+            repository.updateAdminRates(rates).onSuccess {
+                emitToast("রেট ও ব্যাংকিং নাম্বার সফলভাবে আপডেট হয়েছে")
+            }.onFailure {
+                emitToast("আপডেট ব্যর্থ হয়েছে")
+            }
+        }
+    }
+
+    fun topupUser(apiKey: String, addSms: Int, addMin: Int, assignedNum: String? = null) {
+        viewModelScope.launch {
+            repository.topupUser(apiKey, addSms, addMin, assignedNum).onSuccess {
+                emitToast("ইউজার ব্যালেন্স সফলভাবে আপডেট হয়েছে")
+                loadAdminDashboard()
+            }.onFailure {
+                emitToast("ব্যালেন্স আপডেট ব্যর্থ হয়েছে")
+            }
+        }
+    }
+
+    // Google Play In-App Billing
+    val playBillingManager = PlayBillingManager(
+        context = application,
+        coroutineScope = viewModelScope,
+        onPurchaseVerified = { sms, min, assignedNumber ->
+            emitToast("Google Play Purchase Successful! Balance updated.")
+            fetchUserProfileAndQuota()
+        }
+    )
+
+    // Twilio Number Inventory & Marketplace Catalog
+    val numberCatalog = repository.numberCatalog.asStateFlow()
+    val myTwilioNumbers = repository.myTwilioNumbers.asStateFlow()
+    val availableTwilioNumbers = repository.availableTwilioNumbers.asStateFlow()
+
+    fun fetchNumberCatalog() {
+        viewModelScope.launch {
+            repository.fetchNumberCatalog()
+        }
+    }
+
+    fun searchAvailableTwilioNumbers(country: String = "US") {
+        viewModelScope.launch {
+            repository.searchAvailableTwilioNumbers(country)
+        }
+    }
+
+    fun buyTwilioNumber(phoneNumber: String?, friendlyName: String?, assignApiKey: String? = null, onSuccess: (String) -> Unit = {}) {
+        viewModelScope.launch {
+            repository.buyTwilioNumber(phoneNumber, friendlyName, assignApiKey).onSuccess { res ->
+                emitToast("নম্বর সফলভাবে ক্রয় করা হয়েছে: ${res.phoneNumber}")
+                res.phoneNumber?.let { onSuccess(it) }
+                loadAdminDashboard()
+            }.onFailure {
+                emitToast("নম্বর ক্রয় ব্যর্থ: ${it.message}")
+            }
+        }
+    }
+
+    fun releaseTwilioNumber(sidOrNumber: String) {
+        viewModelScope.launch {
+            repository.releaseTwilioNumber(sidOrNumber).onSuccess {
+                emitToast("নম্বর সফলভাবে বাতিল ও বিলিং বন্ধ করা হয়েছে")
+                loadAdminDashboard()
+            }.onFailure {
+                emitToast("নম্বর বাতিল ব্যর্থ: ${it.message}")
+            }
+        }
+    }
+
+    fun fetchMyTwilioNumbers() {
+        viewModelScope.launch {
+            repository.fetchMyTwilioNumbers()
         }
     }
 

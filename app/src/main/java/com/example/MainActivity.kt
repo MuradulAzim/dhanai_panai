@@ -27,13 +27,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -60,6 +63,8 @@ import androidx.core.content.ContextCompat
 import com.example.ui.screens.calls.CallsScreen
 import com.example.ui.screens.dialer.ActiveCallOverlay
 import com.example.ui.screens.dialer.DialerScreen
+import com.example.ui.screens.gemini.GeminiChatScreen
+import com.example.ui.screens.marketplace.MarketplaceScreen
 import com.example.ui.screens.messages.ConversationScreen
 import com.example.ui.screens.messages.MessagesScreen
 import com.example.ui.screens.settings.SettingsScreen
@@ -190,6 +195,18 @@ fun MainContent(viewModel: SecondNumberViewModel) {
                                 }
                             }
                         },
+                        actions = {
+                            IconButton(
+                                onClick = { viewModel.selectTab(AppNavTab.SETTINGS) },
+                                modifier = Modifier.testTag("top_settings_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Settings",
+                                    tint = if (currentTab == AppNavTab.SETTINGS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = MaterialTheme.colorScheme.surface
                         )
@@ -250,16 +267,29 @@ fun MainContent(viewModel: SecondNumberViewModel) {
                         )
 
                         NavigationBarItem(
-                            selected = currentTab == AppNavTab.SETTINGS,
-                            onClick = { viewModel.selectTab(AppNavTab.SETTINGS) },
+                            selected = currentTab == AppNavTab.STORE,
+                            onClick = { viewModel.selectTab(AppNavTab.STORE) },
                             icon = {
                                 Icon(
-                                    imageVector = Icons.Default.Settings,
-                                    contentDescription = "Settings"
+                                    imageVector = Icons.Default.Storefront,
+                                    contentDescription = "Store"
                                 )
                             },
-                            label = { Text("Settings") },
-                            modifier = Modifier.testTag("nav_settings")
+                            label = { Text("Store") },
+                            modifier = Modifier.testTag("nav_store")
+                        )
+
+                        NavigationBarItem(
+                            selected = currentTab == AppNavTab.AI_CHAT,
+                            onClick = { viewModel.selectTab(AppNavTab.AI_CHAT) },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = "Gemini AI"
+                                )
+                            },
+                            label = { Text("Gemini AI") },
+                            modifier = Modifier.testTag("nav_gemini_ai")
                         )
                     }
                 }
@@ -273,6 +303,8 @@ fun MainContent(viewModel: SecondNumberViewModel) {
                         AppNavTab.DIALER -> DialerScreen(viewModel = viewModel)
                         AppNavTab.CALLS -> CallsScreen(viewModel = viewModel)
                         AppNavTab.MESSAGES -> MessagesScreen(viewModel = viewModel)
+                        AppNavTab.STORE -> MarketplaceScreen(viewModel = viewModel)
+                        AppNavTab.AI_CHAT -> GeminiChatScreen(viewModel = viewModel)
                         AppNavTab.SETTINGS -> SettingsScreen(viewModel = viewModel)
                     }
                 }

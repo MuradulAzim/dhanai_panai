@@ -3,6 +3,7 @@ import { TwilioService } from '../services/twilio.service';
 import { config } from '../config';
 import { query, memoryStore } from '../db';
 import { verifyAppAuth } from './auth';
+import { resellerStore } from '../db/store';
 
 export async function messageRoutes(fastify: FastifyInstance) {
   // Send SMS
@@ -12,12 +13,32 @@ export async function messageRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ success: false, error: 'Both "to" and "body" are required' });
     }
 
+    const apiKey = (request.headers['x-api-key'] as string) || (request.query as Record<string, string>)?.apiKey;
+    let senderNumber = config.TWILIO_PHONE_NUMBER;
+    let user = apiKey ? resellerStore.users.get(apiKey) : undefined;
+
+    if (user) {
+      if (user.status !== 'ACTIVE') {
+        return reply.status(403).send({ success: false, error: 'Your account is suspended. Please contact admin.' });
+      }
+      if (user.smsBalance <= 0) {
+        return reply.status(402).send({
+          success: false,
+          error: 'Your SMS quota is exhausted. Please request a recharge package from Settings.'
+        });
+      }
+      user.smsBalance -= 1;
+      user.totalSmsSent += 1;
+      senderNumber = user.assignedNumber || senderNumber;
+    }
+
     const result = await TwilioService.sendSms(to, body);
 
     const messageRecord = {
       messageSid: result.messageSid || 'MSG-' + Date.now(),
+      apiKey: user?.apiKey,
       conversationNumber: to,
-      from: config.TWILIO_PHONE_NUMBER,
+      from: senderNumber,
       to,
       body,
       direction: 'OUTGOING',
@@ -26,6 +47,7 @@ export async function messageRoutes(fastify: FastifyInstance) {
     };
 
     memoryStore.messages.push(messageRecord);
+    resellerStore.messages.push(messageRecord as any);
 
     await query(
       `INSERT INTO messages (message_sid, conversation_number, from_number, to_number, body, direction, status, is_read, created_at)
@@ -46,22 +68,26 @@ export async function messageRoutes(fastify: FastifyInstance) {
       messageSid: result.messageSid,
       status: result.status,
       to,
-      from: config.TWILIO_PHONE_NUMBER,
+      from: senderNumber,
       body,
+      remainingSms: user ? user.smsBalance : undefined,
       errorMessage: result.error
     });
   });
 
   // Get Messages list
   fastify.get('/api/messages', { preHandler: [verifyAppAuth] }, async (request, reply) => {
-    const dbResult = await query(
-      `SELECT id, message_sid as "messageSid", from_number as "from", to_number as "to",
-              body, direction, status, created_at as "createdAt"
-       FROM messages ORDER BY created_at DESC LIMIT 100`
-    );
+    const apiKey = (request.headers['x-api-key'] as string) || (request.query as Record<string, string>)?.apiKey;
+    const user = apiKey ? resellerStore.users.get(apiKey) : undefined;
 
-    if (dbResult.rows && dbResult.rows.length > 0) {
-      return reply.send(dbResult.rows);
+    if (user) {
+      const userMessages = memoryStore.messages.filter(m =>
+        m.apiKey === user.apiKey ||
+        m.from === user.assignedNumber ||
+        m.to === user.assignedNumber ||
+        !m.apiKey
+      );
+      return reply.send(userMessages);
     }
 
     return reply.send(memoryStore.messages);
@@ -70,31 +96,23 @@ export async function messageRoutes(fastify: FastifyInstance) {
   // Get Conversation messages
   fastify.get('/api/conversations/:number/messages', { preHandler: [verifyAppAuth] }, async (request, reply) => {
     const { number } = request.params as { number: string };
-
-    const dbResult = await query(
-      `SELECT id, message_sid as "messageSid", from_number as "from", to_number as "to",
-              body, direction, status, created_at as "createdAt"
-       FROM messages
-       WHERE conversation_number = $1
-       ORDER BY created_at ASC`,
-      [number]
-    );
-
-    if (dbResult.rows && dbResult.rows.length > 0) {
-      return reply.send(dbResult.rows);
-    }
-
     const filtered = memoryStore.messages.filter(m => m.conversationNumber === number);
     return reply.send(filtered);
   });
 
-  // Mark messages as read
+  // Mark messages as read (sets status to READ so double ticks turn blue)
   fastify.post('/api/messages/mark-read', { preHandler: [verifyAppAuth] }, async (request, reply) => {
     const { phoneNumber } = request.body as { phoneNumber?: string };
 
     if (phoneNumber) {
+      memoryStore.messages.forEach(m => {
+        if (m.conversationNumber === phoneNumber) {
+          m.status = 'READ';
+        }
+      });
+
       await query(
-        `UPDATE messages SET is_read = TRUE WHERE conversation_number = $1`,
+        `UPDATE messages SET is_read = TRUE, status = 'READ' WHERE conversation_number = $1`,
         [phoneNumber]
       );
       await query(
@@ -103,6 +121,6 @@ export async function messageRoutes(fastify: FastifyInstance) {
       );
     }
 
-    return reply.send({ success: true, message: 'Messages marked as read' });
+    return reply.send({ success: true, status: 'READ' });
   });
 }

@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -137,7 +139,11 @@ fun ConversationScreen(
         bottomBar = {
             Surface(
                 tonalElevation = 4.dp,
-                color = MaterialTheme.colorScheme.surface
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .imePadding()
             ) {
                 Column(
                     modifier = Modifier
@@ -271,17 +277,30 @@ fun MessageBubble(message: MessageEntity) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
                 if (isOutgoing) {
-                    val statusIcon = when (message.status) {
-                        MessageStatus.SENDING -> Icons.Default.Schedule
-                        MessageStatus.SENT -> Icons.Default.Check
-                        MessageStatus.DELIVERED -> Icons.Default.DoneAll
-                        else -> Icons.Default.Check
+                    val isRead = message.status == MessageStatus.READ
+                    val isDelivered = message.status == MessageStatus.DELIVERED || isRead
+                    val isSent = message.status == MessageStatus.SENT || isDelivered
+
+                    val statusIcon = when {
+                        isDelivered -> Icons.Default.DoneAll // 2 ticks
+                        isSent -> Icons.Default.Check       // 1 tick
+                        else -> Icons.Default.Schedule      // Clock / sending
                     }
+
+                    // Single tick: Grey
+                    // Double tick delivered: Slate Grey
+                    // Double tick read: Vibrant Blue (WhatsApp style)
+                    val tickColor = when {
+                        isRead -> Color(0xFF0284C7)
+                        isDelivered -> Color(0xFF64748B)
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    }
+
                     Icon(
                         imageVector = statusIcon,
                         contentDescription = message.status.name,
-                        tint = if (message.status == MessageStatus.DELIVERED) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.size(14.dp)
+                        tint = tickColor,
+                        modifier = Modifier.size(15.dp)
                     )
                 }
             }

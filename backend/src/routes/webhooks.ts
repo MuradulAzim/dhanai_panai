@@ -2,19 +2,22 @@ import { FastifyInstance } from 'fastify';
 import { TwilioService } from '../services/twilio.service';
 import { config } from '../config';
 import { query, memoryStore } from '../db';
+import { resellerStore } from '../db/store';
 
 export async function webhookRoutes(fastify: FastifyInstance) {
   // Voice Webhook handler
   const handleIncomingVoice = async (request: any, reply: any) => {
-    const signature = request.headers['x-twilio-signature'] as string | undefined;
     const body = (request.body as Record<string, any>) || {};
-
     const fromNumber = body.From || 'Unknown';
     const toNumber = body.To || config.TWILIO_PHONE_NUMBER;
     const callSid = body.CallSid || 'INC-' + Date.now();
 
+    // Check which user owns this virtual number
+    const user = Array.from(resellerStore.users.values()).find(u => u.assignedNumber === toNumber);
+
     const callRecord = {
       callSid,
+      apiKey: user?.apiKey,
       from: fromNumber,
       to: toNumber,
       direction: 'INCOMING',
@@ -24,6 +27,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
     };
 
     memoryStore.calls.unshift(callRecord);
+    resellerStore.calls.unshift(callRecord as any);
 
     await query(
       `INSERT INTO calls (call_sid, from_number, to_number, direction, status, created_at)
@@ -63,6 +67,16 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       if (memCall) {
         memCall.status = callStatus.toUpperCase();
         memCall.duration = duration;
+
+        // Deduct duration in minutes from user's quota
+        if (memCall.apiKey && duration > 0) {
+          const user = resellerStore.users.get(memCall.apiKey);
+          if (user) {
+            const minutesUsed = Math.ceil(duration / 60);
+            user.callMinutesBalance = Math.max(0, user.callMinutesBalance - minutesUsed);
+            user.totalCallMinutesUsed += minutesUsed;
+          }
+        }
       }
 
       await query(
@@ -82,8 +96,12 @@ export async function webhookRoutes(fastify: FastifyInstance) {
     const messageBody = body.Body || '';
     const messageSid = body.MessageSid || 'SMS-' + Date.now();
 
+    // Check which user owns this virtual number
+    const user = Array.from(resellerStore.users.values()).find(u => u.assignedNumber === toNumber);
+
     const messageRecord = {
       messageSid,
+      apiKey: user?.apiKey,
       conversationNumber: fromNumber,
       from: fromNumber,
       to: toNumber,
@@ -94,6 +112,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
     };
 
     memoryStore.messages.push(messageRecord);
+    resellerStore.messages.push(messageRecord as any);
 
     await query(
       `INSERT INTO messages (message_sid, conversation_number, from_number, to_number, body, direction, status, is_read, created_at)
@@ -124,17 +143,17 @@ export async function webhookRoutes(fastify: FastifyInstance) {
   fastify.post('/api/webhooks/sms/status', async (request, reply) => {
     const body = (request.body as Record<string, any>) || {};
     const messageSid = body.MessageSid;
-    const messageStatus = body.MessageStatus || 'delivered';
+    const messageStatus = (body.MessageStatus || 'delivered').toUpperCase();
 
     if (messageSid) {
       const memMsg = memoryStore.messages.find(m => m.messageSid === messageSid);
       if (memMsg) {
-        memMsg.status = messageStatus.toUpperCase();
+        memMsg.status = messageStatus === 'DELIVERED' ? 'DELIVERED' : messageStatus;
       }
 
       await query(
         `UPDATE messages SET status = $1 WHERE message_sid = $2`,
-        [messageStatus.toUpperCase(), messageSid]
+        [messageStatus, messageSid]
       );
     }
 

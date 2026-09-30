@@ -1,95 +1,114 @@
-# Second Number: Android (Kotlin + Compose) + Fastify + PostgreSQL + Twilio
+# Second Number: Multi-User Reseller, API Provider & Twilio Telephony System
 
-A complete, production-ready second phone number system using your existing **Twilio Phone Number**.
-
-## System Architecture
-
-* **Android Mobile App**: Built with Kotlin, Jetpack Compose, Material 3, Room local database for offline persistence, and Retrofit.
-* **Backend API**: Fastify, TypeScript, and Twilio Node SDK.
-* **Database**: PostgreSQL for storing calls, conversations, messages, and user states.
-* **Security**:
-  * **Permanent Twilio Credentials** (`TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`) are strictly kept on the backend server—never embedded into the Android client.
-  * Webhook signatures are validated using `twilio.validateRequest`.
-  * Mobile client authenticates with the backend using API Key / Bearer tokens.
+একটি সম্পূর্ণ টেলিযোগাযোগ ও সেকেন্ড নম্বর ভার্চুয়াল নেটওয়ার্ক সিস্টেম। এর মাধ্যমে আপনি নিজেই একজন **API Provider / Reseller** হতে পারেন এবং একাধিক ইউজারকে ভার্চুয়াল নম্বরে ভয়েস কল ও এসএমএস সেবা প্রদান করতে পারেন।
 
 ---
 
-## 1. Quick Start with Docker Compose
+## ১. সিস্টেম আর্কিটেকচার (System Architecture)
 
-### Prerequisites
-* Docker and Docker Compose installed
-* Your Twilio Account SID, Auth Token, and Twilio Phone Number (in E.164 format, e.g. `+18005550199`)
+* **অ্যান্ড্রয়েড অ্যাপ্লিকেশন (Kotlin + Jetpack Compose + Material 3)**:
+  * **ইউজার মোড (User App)**: ইউজাররা প্যাকেজ ক্রয়, ব্যালেন্স চেক, কল করা/রিসিভ করা এবং এসএমএস আদান-প্রদান করতে পারেন।
+  * **এডমিন মোড (Admin Panel - PIN: 7788)**: এডমিন রেট নির্ধারণ, বাংলাদেশি মোবাইল ব্যাংকিং নম্বর সেট করা, পেমেন্ট রিকোয়েস্ট (TrxID ও স্ক্রিনশট) যাচাই করে স্বয়ংক্রিয়ভাবে API Key ও ভার্চুয়াল নম্বর ইস্যু করতে পারেন।
+* **মাল্টি-টেন্যান্ট ব্যাকএন্ড (Fastify + TypeScript + Twilio SDK)**:
+  * টুইলিওর একটি মাস্টার অ্যাকাউন্ট দিয়ে একাধিক ইউজারের জন্য কাজ করে।
+  * ইনকামিং কল/মেসেজ স্বয়ংক্রিয়ভাবে যার যার নির্দিষ্ট ডিভাইসে রাউটিং হয়।
+  * সাধারণ ইউজাররা টুইলিও সম্পর্কে কিছুই জানতে পারবে না; সিস্টেমটি সম্পূর্ণ আপনার নিজস্ব API নেটওয়ার্ক হিসেবে কাজ করে।
 
-### Step 1: Configure Environment Variables
-Copy `/backend/.env.example` to `/backend/.env` (or set them in root `.env`):
+---
+
+## ২. ইউজার ইন্টারফেসের সমাধানসমূহ (UI Bug Fixes)
+
+1. **মেসেজ টাইপিং বক্স ফিক্স (Keyboard Insets)**:
+   * কীবোর্ড ওপেন করলে টেক্সট ইনপুট বক্স আর কীবোর্ডের নিচে ঢাকা পড়বে না (`imePadding()` ও `navigationBarsPadding()` দ্বারা ফিক্স করা হয়েছে)।
+2. **কল লিস্টের লে-আউট ফিক্স**:
+   * কল হিস্ট্রির নম্বর ও সময় আর উল্লম্বভাবে (vertical letters) ভাঙবে না। কম্প্যাক্ট বাটন ও টেক্সট ট্রাঙ্কেশন দিয়ে সুন্দর ও রেসপনসিভ করা হয়েছে।
+3. **দ্বৈত টিক মার্ক ও রঙ পরিবর্তন (Double Ticks with Color Change)**:
+   * মেসেজ পাঠানো হলে: ১টি ধূসর টিক (`✓`)
+   * প্রাপকের ডিভাইসে ডেলিভার্ড হলে: ২টি ধূসর টিক (`✓✓`)
+   * প্রাপক মেসেজ পড়লে বা ওপেন করলে: ২টি উজ্জ্বল নীল টিক (`✓✓` WhatsApp style)
+4. **ডায়ালারে সরাসরি SMS বাটন**:
+   * ডায়ালারে নম্বর তোলার পর আলাদা কোনো পপ-আপ ছাড়া এক ট্যাপেই চ্যাট ওপেন করার বাটন যুক্ত করা হয়েছে।
+
+---
+
+## ৩. প্যাকেজ ক্রয় ও বাংলাদেশি মোবাইল ব্যাংকিং পেমেন্ট ফ্লো
+
+১. ইউজার অ্যাপের **Settings**-এ গিয়ে **"প্যাকেজ কিনুন"** চাপবেন।
+২. কাঙ্ক্ষিত SMS সংখ্যা এবং কল মিনিট নির্বাচন করবেন। সিস্টেম স্বয়ংক্রিয়ভাবে মোট প্রদেয় মূল্য (টাকা - BDT) হিসাব করে দেখাবে।
+৩. স্ক্রিনে এডমিনের **bKash Personal**, **Nagad Personal**, বা **Rocket** নম্বর দেখতে পাবেন এবং কপি করতে পারবেন।
+৪. টাকা পাঠানোর পর ইউজার তার নাম, মোবাইল নম্বর, পেমেন্ট মেথড, Transaction ID (TrxID) এবং স্ক্রিনশট দিয়ে সাবমিট করবেন।
+৫. এডমিন তার প্যানেলে নোটিফিকেশন পাবেন এবং যাচাই করে **"অনুমোদন ও Key ইস্যু"** বাটনে চাপবেন।
+৬. ইউজারের অ্যাপে স্বয়ংক্রিয়ভাবে এপিআই কি সংরক্ষিত হবে এবং ভার্চুয়াল নম্বর ও ব্যালেন্স লোড হয়ে যাবে!
+
+---
+
+## ৪. সার্ভার সেটআপ ও সিক্রেট কনফিগারেশন (Termux / Linux / VPS)
+
+### ধাপ ১: প্রজেক্ট ফোল্ডারে প্রবেশ করুন
 ```bash
-cp backend/.env.example backend/.env
+cd second-number/backend
 ```
-Fill in your credentials:
+
+### ধাপ ২: ব্যাকএন্ড ডিপেনডেন্সি ও বিল্ড
+```bash
+npm install
+npm run build
+```
+
+### ধাপ ৩: এনভায়রনমেন্ট ভেরিয়েবল (.env)
+`backend/.env` ফাইলে আপনার টুইলিও মাস্টার ক্রেডেনশিয়াল দিন:
 ```env
 PORT=3000
 HOST=0.0.0.0
-BASE_URL=https://your-public-url.ngrok-free.app
-API_SECRET_KEY=test-secret-token
+BASE_URL=https://director-headline-protocols-applies.trycloudflare.com
 
-DATABASE_URL=postgres://postgres:postgrespassword@postgres:5432/second_number
 TWILIO_ACCOUNT_SID=ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-TWILIO_AUTH_TOKEN=your_twilio_auth_token
+TWILIO_AUTH_TOKEN=your_auth_token_here
 TWILIO_PHONE_NUMBER=+18005550199
 TWILIO_VALIDATE_WEBHOOKS=false
 ```
 
-### Step 2: Start PostgreSQL and Fastify Server
+### ধাপ ৪: ব্যাকএন্ড চালু করুন
 ```bash
-docker-compose up --build
+npm start
 ```
-The backend will automatically:
-1. Initialize the PostgreSQL database schema from `backend/src/db/schema.sql`.
-2. Connect to Twilio with your credentials.
-3. Serve REST endpoints on `http://localhost:3000`.
+
+### ধাপ ৫: পাবলিক টানেল চালু করুন
+টারমাক্সের নতুন সেশনে:
+```bash
+cloudflared tunnel --url http://localhost:3000
+```
+অথবা:
+```bash
+npx localtunnel --port 3000
+```
 
 ---
 
-## 2. Twilio Webhook Configuration
+## ৫. টুইলিও কনসোল ওয়েব-হুক কনফিগারেশন (Twilio Webhook)
 
-To receive incoming calls and SMS on your device:
+টুইলিও কনসোলে গিয়ে আপনার ফোন নম্বরের সেটিংসে নিম্নোক্ত ওয়েব-হুকগুলো দিন:
 
-1. Open the [Twilio Console Phone Numbers page](https://console.twilio.com/us1/develop/phone-numbers/manage/incoming).
-2. Click on your active Twilio phone number.
-3. In **Voice & Fax**:
-   * Set **A CALL COMES IN** to **Webhook**.
-   * URL: `https://<YOUR_PUBLIC_DOMAIN>/api/webhooks/voice/incoming` (HTTP POST).
-4. In **Messaging**:
-   * Set **A MESSAGE COMES IN** to **Webhook**.
-   * URL: `https://<YOUR_PUBLIC_DOMAIN>/api/webhooks/sms/incoming` (HTTP POST).
-5. Click **Save Configuration**.
+* **Voice Configuration (A call comes in):**
+  * URL: `https://<আপনার-পাবলিক-লিংক>/api/webhooks/voice/incoming`
+  * HTTP Method: `POST`
+* **Voice Status changes:**
+  * URL: `https://<আপনার-পাবলিক-লিংক>/api/webhooks/voice/status`
+  * HTTP Method: `POST`
+* **Messaging Configuration (A message comes in):**
+  * URL: `https://<আপনার-পাবলিক-লিংক>/api/webhooks/sms/incoming`
+  * HTTP Method: `POST`
 
-*(Tip: In local development, use tools like `ngrok http 3000` or Cloudflare Tunnels to obtain a public HTTPS URL).*
+*(নোট: ব্যাকএন্ডে আপনার পূর্বের `/api/v1/twilio/incoming` এবং `/telephony/inbound/1` লিংক দুটিও অ্যালিয়াস হিসেবে সমর্থিত)*
 
 ---
 
-## 3. Android Application Features
+## ৬. এডমিন কন্ট্রোল প্যানেল (Admin Panel)
 
-* **Dialer Screen**:
-  * Interactive 12-key telephone keypad (1-9, *, 0/+, #) with letters.
-  * Real-time international country code prefix selector (+1, +44, +49, +61, etc.).
-  * Outbound caller ID banner displaying your active Twilio phone number.
-  * Long-press on 0 for `+`.
-* **In-Call Screen & Answering**:
-  * High-priority heads-up notification for incoming calls.
-  * Active call screen with animated waveform, duration counter, Mute, Speakerphone, and End Call.
-  * Answer and Decline buttons for incoming Twilio calls.
-* **Calls Tab**:
-  * Filter call logs by All, Missed, Outgoing, and Incoming.
-  * Timestamp, call duration, and status.
-  * One-tap callback and one-tap send SMS.
-* **Messages Tab & Conversation Screen**:
-  * Full SMS chat threads with delivery receipts and timestamps.
-  * Character counter with GSM 160-character segment estimator.
-  * Unread badge counter in bottom navigation.
-  * Start new chats with any international phone number.
-* **Settings Tab**:
-  * Test server connectivity with real-time status indicators.
-  * Change backend URL and API access token.
-  * Copy pre-formatted Twilio webhook URLs.
-  * Simulated incoming call and incoming SMS test triggers.
+* অ্যাপের **Settings** স্ক্রিনের একদম নিচে **"এডমিন কন্ট্রোল প্যানেল"** বাটনে চাপ দিন।
+* ডিফল্ট এডমিন পিন দিন: **`7788`**
+* এডমিন যা যা করতে পারবেন:
+  1. **পেমেন্ট রিকোয়েস্ট অনুমোদন/বাতিল**: TrxID ও স্ক্রিনশট দেখে এক ক্লিকে এপিআই কি ইস্যু।
+  2. **সার্ভিস রেট নির্ধারণ**: প্রতি SMS ও প্রতি মিনিট কলের রেট (টাকা) পরিবর্তন।
+  3. **মোবাইল ব্যাংকিং নম্বর পরিবর্তন**: bKash, Nagad, Rocket নম্বর আপডেট।
+  4. **ইউজারদের ব্যালেন্স টপ-আপ**: যেকোনো ইউজারের নম্বরে বাড়তি SMS বা মিনিট যুক্ত করা।

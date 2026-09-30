@@ -3,6 +3,7 @@ import { TwilioService } from '../services/twilio.service';
 import { config } from '../config';
 import { query, memoryStore } from '../db';
 import { verifyAppAuth } from './auth';
+import { resellerStore } from '../db/store';
 
 export async function callRoutes(fastify: FastifyInstance) {
   // Make Outbound Call
@@ -12,11 +13,29 @@ export async function callRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ success: false, error: 'Destination phone number (to) is required' });
     }
 
+    const apiKey = (request.headers['x-api-key'] as string) || (request.query as Record<string, string>)?.apiKey;
+    let callerNumber = config.TWILIO_PHONE_NUMBER;
+    let user = apiKey ? resellerStore.users.get(apiKey) : undefined;
+
+    if (user) {
+      if (user.status !== 'ACTIVE') {
+        return reply.status(403).send({ success: false, error: 'Your account is suspended. Please contact admin.' });
+      }
+      if (user.callMinutesBalance <= 0) {
+        return reply.status(402).send({
+          success: false,
+          error: 'Your call minutes quota is exhausted. Please request a recharge package from Settings.'
+        });
+      }
+      callerNumber = user.assignedNumber || callerNumber;
+    }
+
     const result = await TwilioService.makeOutboundCall(to);
 
     const callRecord = {
       callSid: result.callSid || 'CALL-' + Date.now(),
-      from: config.TWILIO_PHONE_NUMBER,
+      apiKey: user?.apiKey,
+      from: callerNumber,
       to,
       direction: 'OUTGOING',
       status: result.status || 'INITIATED',
@@ -25,6 +44,7 @@ export async function callRoutes(fastify: FastifyInstance) {
     };
 
     memoryStore.calls.unshift(callRecord);
+    resellerStore.calls.unshift(callRecord as any);
 
     await query(
       `INSERT INTO calls (call_sid, from_number, to_number, direction, status, created_at)
@@ -37,6 +57,8 @@ export async function callRoutes(fastify: FastifyInstance) {
       success: result.success,
       callSid: result.callSid,
       status: result.status,
+      callerNumber,
+      remainingMinutes: user ? user.callMinutesBalance : undefined,
       message: result.error
     });
   });
@@ -65,14 +87,17 @@ export async function callRoutes(fastify: FastifyInstance) {
 
   // Get Call History
   fastify.get('/api/calls', { preHandler: [verifyAppAuth] }, async (request, reply) => {
-    const dbResult = await query(
-      `SELECT id, call_sid as "callSid", from_number as "from", to_number as "to",
-              direction, status, duration, created_at as "createdAt"
-       FROM calls ORDER BY created_at DESC LIMIT 100`
-    );
+    const apiKey = (request.headers['x-api-key'] as string) || (request.query as Record<string, string>)?.apiKey;
+    const user = apiKey ? resellerStore.users.get(apiKey) : undefined;
 
-    if (dbResult.rows && dbResult.rows.length > 0) {
-      return reply.send(dbResult.rows);
+    if (user) {
+      const userCalls = memoryStore.calls.filter(c =>
+        c.apiKey === user.apiKey ||
+        c.from === user.assignedNumber ||
+        c.to === user.assignedNumber ||
+        !c.apiKey
+      );
+      return reply.send(userCalls);
     }
 
     return reply.send(memoryStore.calls);
